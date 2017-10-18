@@ -1,0 +1,126 @@
+heat_template_version: 2017-06-16
+description: On demand Server creation
+ 
+parameters:
+  Name:
+    type: string
+    description: Name of the server 
+    default: ondemand-server
+  ImageID:
+    type: string
+    description: Image use to boot a server
+  NetID1:
+    type: string
+    description: Network ID for the server
+    default: hidden-net1
+  NetID2:
+    type: string
+    description: Network ID for the server
+    default: hidden-net2
+  Management:
+    type: string
+    description: Network name of management net
+    default: Management
+  FlavorID:
+    type: string
+    description: Flavor ID for the server
+    constraints:
+      - allowed_values: [ m1.large, m1.small ]
+        description: Value must be one of ct.server, or m1.small.
+  key_name:
+    type: string
+    description: Name of keypair to assign to server
+    default: server-keypair
+  timeout:
+    type: number
+    description: Timeout for WaitCondition, depends on your image and environment
+    default: 300
+  Net1_CIDR:
+    type: string
+    description: CIDR of created network1
+    default: 192.168.88.0/24
+  Net2_CIDR:
+    type: string
+    description: CIDR of created network2
+    default: 192.168.89.0/24
+  net1_pool_start:
+    type: string
+    description: IP address pool start
+    default: 192.168.88.100
+  net1_pool_end:
+    type: string
+    description: IP address pool start
+    default: 192.168.88.250
+  net2_pool_start:
+    type: string
+    description: IP address pool start
+    default: 192.168.89.100
+  net2_pool_end:
+    type: string
+    description: IP address pool start
+    default: 192.168.89.250
+ 
+resources:
+  
+  net1:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: NetID1 }
+
+  net2:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: NetID2 }
+
+  subnet1:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: net1 }
+      cidr: { get_param: Net1_CIDR }
+      allocation_pools:
+        - start: { get_param: net1_pool_start }
+          end: { get_param: net1_pool_end }
+
+  subnet2:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: net2 }
+      cidr: { get_param: Net2_CIDR }
+      allocation_pools:
+        - start: { get_param: net2_pool_start }
+          end: { get_param: net2_pool_end }
+
+  server:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: Name }
+      image: { get_param: ImageID }
+      flavor: { get_param: FlavorID }
+      key_name: {get_param: key_name}
+      networks:
+      - network: { get_param: Management }
+      - port: { get_resource: net1_port }
+      - port: { get_resource: net2_port }
+      user_data_format: RAW
+      
+ 
+  net1_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id: { get_resource: net1 }
+      fixed_ips:
+        - subnet_id: { get_resource: subnet1 }
+
+  net2_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id: { get_resource: net2 }
+      fixed_ips:
+        - subnet_id: { get_resource: subnet2 }
+
+
+outputs:
+  private_ip:
+    description: IP address of the server in the management network
+    value: { get_attr: [ server, first_address ] }
+  
